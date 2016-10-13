@@ -3,7 +3,7 @@
 *.d
 *.o
 .depend
-
+*.DS_Store
 /deps/dpdk
 /deps/dune
 /deps/pcidma
