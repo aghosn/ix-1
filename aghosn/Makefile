@@ -25,15 +25,13 @@ KERNEL= /usr/src/linux-headers-4.4.0-22/arch/x86/include/asm/vmx.h
 CFLAGS  = -Wall -g -MD -O3 -I../libix -I../inc -I$(LIBDUNE) -pthread -I$(KERNEL)
 #LIBS	= -lpthread -ldune $(LIBDUNE)/libdune.a ../libix/libix.a
 
-
-
 APPS = test
 
-all: $(APPS)
+all: $(APPS) $(SOURCE)
 
 $(APPS): $(LIBDUNE)/libdune.a
 
-$(APPS): %: %.o
+$(APPS): %: %.o tools.o
 	$(CC) $(CFLAGS) $^ -o $@
 
 clean:
