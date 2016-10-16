@@ -32,10 +32,10 @@ static inline void * alloc_page(void)
 }
 
 /*TODO deep copy is useless since old virtual will not be valid.*/
-ptent_t* deep_copy_pgroot(ptent_t *pgroot) {
+ptent_t* deep_copy_pgroot(ptent_t *pgroot, ptent_t *cppgroot) {
 
 	//Create the copy for the page root.
-	ptent_t *cppgroot = memalign(PGSIZE, PGSIZE);
+	cppgroot = memalign(PGSIZE, PGSIZE);
 	cppgroot = memcpy(cppgroot, pgroot, PGSIZE);
 
 	//Creating copies for pml4
@@ -81,16 +81,45 @@ ptent_t* deep_copy_pgroot(ptent_t *pgroot) {
 				memset(pte, 0, PGSIZE);
 
 				pde[k] = PTE_ADDR(pte) | PTE_DEF_FLAGS;
-				//TODO a memcpy for the pte.
+				//TODO a map to same pte.
+				
+				// printf("1. Before the copy of pte.\n");
+				// if (pte_big(pde[k]))
+				// 	printf("### A big entry.\n");
+				// *pte = *o_pte; //TODO apparently bug here.
+				// printf("2. After the copy of pte.\n");
+				
+				for (int l = 0; l < GROW_SIZE; l++) {
+
+					printf("(%d, %d, %d, %d): ", i, j, k, l);
+					
+					if (pte_big(o_pdpte[j]))
+						printf("(Big table 1GB) ");
+
+					if (pte_big(o_pde[k]))
+						printf("(Big table 2MB) ");
+
+					if (pte_present(o_pte[l])) {
+						printf("Gonna copy -> ");
+						pte[l] = o_pte[l];
+						printf("Copied.\n");
+					} else
+						printf("Not present.\n");
+				}
+				printf("Out of the loop\n");
 			}
+
+			printf("Out the level 2 loop\n");
 		}
 
+		printf("Out the level 3 loop.\n");
 	}
 	//TODO final goal, print different for all.
 	// if(!pdpte || !pde || !pte) printf("Have null values.\n");
 	// printf((pdpte == o_pdpte)? "pdpte the same.\n" : "pdpte different.\n");
 	// printf((pde == o_pde)? "pde the same.\n" : "pde different.\n");
 	// printf((pte == o_pte)? "pdte the same.\n" : "pdte different.\n");
+	printf("Before the return.\n");
 	return cppgroot;
 }
 

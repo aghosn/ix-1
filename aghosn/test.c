@@ -75,31 +75,27 @@ int main() {
 
 	println("I'm in dune mode !");
 
-	/*printf("The cr3 value is %p\n", read_cr3());
-	uint64_t test = 0xdeadbeef;
-	printf("The address on the stack %p for deadbeef.\n", &test);
-	has_a_mapping(pgroot, &test);
-
-	crawl_stats_t result = crawl(pgroot);
+	/*crawl_stats_t result = crawl(pgroot);
 	printf("The result is %u pml4 entries, %u pdpte entries, and %u pde entries.\n", result.pml4_entries, result.pdpte_entries, result.pde_entries);
-	printf("And the bigs %u and %u\n", result.pdpte_big, result.pde_big);
+	printf("And the bigs %u and %u\n", result.pdpte_big, result.pde_big);*/
 
-	printf("Let's remove the write access\n");
-	ptent_t* newPg = remove_access_RW(pgroot);*/
 	dune_register_pgflt_handler(pgflt_handler);
-	// int* t = NULL;
-	// int res = *t;
-	// printf("Result %d\n", res);
-	ptent_t* newPg = remove_access_RW(pgroot);
+	
+	// ptent_t* newPg = remove_access_RW(pgroot);
 
+	ptent_t *cppgroot;
+
+	cppgroot = deep_copy_pgroot(pgroot, cppgroot);
 	//TODO like in sthread with st_tf, and jump to user.
-	struct dune_tf tf;
+	// struct dune_tf tf;
 
-	load_cr3((unsigned long) newPg);
+	printf("Just before the load_cr3.\n");
+	
+	load_cr3((unsigned long) cppgroot);
 
-	dune_jump_to_user(&tf);
+	//dune_jump_to_user(&tf);
 
-	load_cr3(pgroot);
+	//load_cr3(pgroot);
 
 	printf("Reached the end!\n");
 	// int a = 3;
