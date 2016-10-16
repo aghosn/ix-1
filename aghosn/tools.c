@@ -1,5 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
+
 #include "tools.h"
+
 
 #define PTE_DEF_FLAGS	(PTE_P | PTE_W | PTE_U)
 
@@ -84,12 +87,10 @@ ptent_t* deep_copy_pgroot(ptent_t *pgroot) {
 
 	}
 	//TODO final goal, print different for all.
-	if(!pdpte || !pde || !pte) printf("Have null values.\n");
-	printf((pdpte == o_pdpte)? "pdpte the same.\n" : "pdpte different.\n");
-	printf((pde == o_pde)? "pde the same.\n" : "pde different.\n");
-	printf((pte == o_pte)? "pdte the same.\n" : "pdte different.\n");
-
-
+	// if(!pdpte || !pde || !pte) printf("Have null values.\n");
+	// printf((pdpte == o_pdpte)? "pdpte the same.\n" : "pdpte different.\n");
+	// printf((pde == o_pde)? "pde the same.\n" : "pde different.\n");
+	// printf((pte == o_pte)? "pdte the same.\n" : "pdte different.\n");
 	return cppgroot;
 }
 
@@ -98,7 +99,7 @@ ptent_t* deep_copy_pgroot(ptent_t *pgroot) {
 
 bool has_a_mapping(ptent_t pgroot, void* va) {
 	int i, j, k, l;
-	ptent_t *pml4 = pgroot, *pdpte, *pde, *pte;
+	ptent_t *pml4 = (ptent_t*) pgroot, *pdpte, *pde, *pte;
 
 	i = PDX(3, va);
 	j = PDX(2, va);
@@ -110,7 +111,6 @@ bool has_a_mapping(ptent_t pgroot, void* va) {
 		return false;
 	} 
 
-	if(pdpte == NULL) printf("PDPTE is null\n");
 	printf("The value for i: %d\n", i);
 	pdpte = (ptent_t*) PTE_ADDR(pml4[i]);
 	printf("Now pdpte is %p\n", pdpte);
@@ -170,9 +170,9 @@ crawl_stats_t crawl(ptent_t* root) {
 		pdpte = (ptent_t*) PTE_ADDR(pml4[i]);
 		res.pml4_entries++;
 
-		if (pte_RW(pml4[i])) {
-			printf("Has rigths RW for %d\n", i);
-		}
+		// if (pte_RW(pml4[i])) {
+		// 	printf("Has rigths RW for %d\n", i);
+		// }
 		
 		//Page directory pointers level 3
 		for (int j = 0; j < GROW_SIZE; j++) {
@@ -207,8 +207,54 @@ crawl_stats_t crawl(ptent_t* root) {
 			}
 		}
 	}
-
 	return res;
+}
+
+
+
+ptent_t* remove_access_RW(ptent_t* root) {
+	//try the lazy way
+	ptent_t* pml4 = (ptent_t*)root, *pdpte, *pde, *pte;
+	
+	//Page memory level 4
+	for (int i = 0; i < GROW_SIZE; i++) {
+		if (!pte_present(pml4[i]) || !pte_RW(pml4[i]))
+			continue;
+		
+		pdpte = (ptent_t*) PTE_ADDR(pml4[i]);
+		
+		//Page directory pointers level 3
+		for (int j = 0; j < GROW_SIZE; j++) {
+			if (!pte_present(pdpte[j]) || !pte_RW(pdpte[j]))
+				continue;
+
+			if (pte_big(pdpte[j])) {
+				continue;
+			}
+
+
+			pde = (ptent_t*) PTE_ADDR(pdpte[j]);
+
+			//Page directories level 2
+			for (int k = 0; k < GROW_SIZE; k++) {
+				if(!pte_present(pde[k]) || !pte_RW(pde[k]))
+					continue;
+
+				if (pte_big(pde[k])) {
+					continue;
+				}
+
+				//Page table level 1
+				pte = (ptent_t*) PTE_ADDR(pde[k]);
+				
+				pde[k] = pde[k] | PTE_W;
+
+				/*printf("Size of pte %u\n", sizeof(pte));
+				printf("Size of what it points to %u\n", sizeof(*pte));*/
+			}
+		}
+	}
+	return root;
 }
 
 

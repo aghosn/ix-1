@@ -18,5 +18,6 @@ typedef struct crawl_stats {
 ptent_t* deep_copy_pgroot(ptent_t *pgroot);
 bool has_a_mapping(ptent_t pgroot, void* va);
 crawl_stats_t crawl(ptent_t* root);
+ptent_t* remove_access_RW(ptent_t* root);
 
 #endif
