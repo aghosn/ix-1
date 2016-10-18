@@ -54,7 +54,7 @@ ptent_t* deep_copy_pgroot(ptent_t *pgroot, ptent_t *cppgroot) {
 		pdpte = alloc_page();
 		memset(pdpte, 0, PGSIZE);
 		//TODO copy the flags.
-		pml4[i] = PTE_ADDR(pdpte) | PTE_DEF_FLAGS;
+		pml4[i] = PTE_ADDR(pdpte) | PTE_FLAGS(o_pml4[i]);
 
 		for (int j = 0; j < GROW_SIZE; j++) {
 			//TODO Handle big too!
@@ -72,7 +72,7 @@ ptent_t* deep_copy_pgroot(ptent_t *pgroot, ptent_t *cppgroot) {
 			pde = alloc_page();
 			memset(pde, 0 , PGSIZE);
 			//TODO flags?
-			pdpte[j] = PTE_ADDR(pde) | PTE_DEF_FLAGS;
+			pdpte[j] = PTE_ADDR(pde) | PTE_FLAGS(o_pdpte[j]);
 
 			for (int k = 0; k < GROW_SIZE; k++) {
 				//TODO handle big too.
@@ -90,7 +90,7 @@ ptent_t* deep_copy_pgroot(ptent_t *pgroot, ptent_t *cppgroot) {
 				pte = alloc_page();
 				memset(pte, 0, PGSIZE);
 
-				pde[k] = PTE_ADDR(pte) | PTE_DEF_FLAGS;
+				pde[k] = PTE_ADDR(pte) | PTE_FLAGS(o_pde[k]);
 				
 				for (int l = 0; l < GROW_SIZE; l++) {
 
@@ -106,6 +106,7 @@ ptent_t* deep_copy_pgroot(ptent_t *pgroot, ptent_t *cppgroot) {
 	return cppgroot;
 }
 
+
 //TOOD what I actually need is to keep the same mappings but change access policies
 //They should not be relevant for the addressing.
 
@@ -119,47 +120,52 @@ bool has_a_mapping(ptent_t pgroot, void* va) {
 	l = PDX(0, va);
 
 	if (!pte_present(pml4[i])) {
-		printf("pdpte is Not present.");
+		// printf("pdpte is Not present.");
 		return false;
 	} 
 
-	printf("The value for i: %d\n", i);
+	// printf("The value for i: %d\n", i);
 	pdpte = (ptent_t*) PTE_ADDR(pml4[i]);
-	printf("Now pdpte is %p\n", pdpte);
+	// printf("Now pdpte is %p\n", pdpte);
 
 	if (!pte_present(pdpte[j])){
-		printf("The pde is not present!\n");
+		// printf("The pde is not present!\n");
 		return false;
 	}
 
 
-	printf("The pde is present.\n");
+	// printf("The pde is present.\n");
 	if (pte_big(pdpte[j])) {
-		printf("Using the big scheme.\n");
+		// printf("Using the big scheme.\n");
 		return false;
 	}
 
 	pde = (ptent_t*) PTE_ADDR(pdpte[j]);
-	printf("The pde %p \n", pde);
+	// printf("The pde %p \n", pde);
 
 	if (!pte_present(pde[k])) {
-		printf("The pte is not present.\n");
+		// printf("The pte is not present.\n");
 		return false;
 	}
 
 	if (pte_big(pde[k])) {
-		printf("Using the big scheme.\n");
+		// printf("Using the big scheme.\n");
 		return false;
 	}
 
 	pte = (ptent_t *) PTE_ADDR(pde[k]);
-	printf("pte is present and is %p.\n", pte);
+	// printf("pte is present and is %p.\n", pte);
 	
 	ptent_t* out = &pte[l];
-	printf("The l is %d", l);
-	printf("The result is %p\n", out);
+	// printf("The l is %d", l);
+	// printf("The result is %p\n", out);
 
 	return true;
+}
+
+location_t get_location(ptent_t* root, void *va) {
+	location_t res = {PDX(3, va), PDX(2, va), PDX(1, va), PDX(0, va)};
+	return res;
 }
 
 
@@ -224,49 +230,28 @@ crawl_stats_t crawl(ptent_t* root) {
 
 
 
-ptent_t* remove_access_RW(ptent_t* root) {
-	//try the lazy way
-	ptent_t* pml4 = (ptent_t*)root, *pdpte, *pde, *pte;
-	
-	//Page memory level 4
-	for (int i = 0; i < GROW_SIZE; i++) {
-		if (!pte_present(pml4[i]) || !pte_RW(pml4[i]))
-			continue;
-		
-		pdpte = (ptent_t*) PTE_ADDR(pml4[i]);
-		
-		//Page directory pointers level 3
-		for (int j = 0; j < GROW_SIZE; j++) {
-			if (!pte_present(pdpte[j]) || !pte_RW(pdpte[j]))
-				continue;
+int make_read_only(ptent_t* root, location_t l) {
+	if (!root)
+		return -1;
 
-			if (pte_big(pdpte[j])) {
-				continue;
-			}
+	if(!pte_present(root[l.i]))
+		return -2;
 
+	ptent_t *pdpte = PTE_ADDR(root[l.i]);
+	if(!pte_present(pdpte[l.j]))
+		return -3;
 
-			pde = (ptent_t*) PTE_ADDR(pdpte[j]);
+	ptent_t *pde =  PTE_ADDR(pdpte[l.j]);
+	if(!pte_present(pde[l.k]))
+		return -4;
 
-			//Page directories level 2
-			for (int k = 0; k < GROW_SIZE; k++) {
-				if(!pte_present(pde[k]) || !pte_RW(pde[k]))
-					continue;
+	ptent_t *pte = PTE_ADDR(pde[l.k]);
+	if (!pte_present(pte[l.l]))
+		return -5;
 
-				if (pte_big(pde[k])) {
-					continue;
-				}
+	pte[l.l] &= ~PTE_W;
 
-				//Page table level 1
-				pte = (ptent_t*) PTE_ADDR(pde[k]);
-				
-				pde[k] = pde[k] | PTE_W;
-
-				/*printf("Size of pte %u\n", sizeof(pte));
-				printf("Size of what it points to %u\n", sizeof(*pte));*/
-			}
-		}
-	}
-	return root;
+	return 0;
 }
 
 

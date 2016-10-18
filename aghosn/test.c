@@ -3,6 +3,9 @@
 #include "test.h"
 #include <asm/vmx.h>
 #include "tools.h"
+#include <sys/mman.h>
+
+int GLOBAL_TESTING = 3;
 
 static void pgflt_handler(uintptr_t addr, uint64_t fec, struct dune_tf *tf)
 {
@@ -10,9 +13,14 @@ static void pgflt_handler(uintptr_t addr, uint64_t fec, struct dune_tf *tf)
 
         printf((was_user)? "Was in user mode\n" : "Was not in user mode\n");
 
-        //dune_dump_trap_frame(tf);
-        abort();
-
+        if (was_user) {
+        	printf("CR2 %p and fec %lu \n", addr, fec);
+        	fflush(stdout);
+        	dune_dump_trap_frame(tf);
+        	abort();
+        }
+        
+        load_cr3(pgroot);
        /* if (was_user) {
                 printf("sandbox: got unexpected G3 page fault at addr %lx, fec %lx\n", addr, fec);
                 dune_dump_trap_frame(tf);
@@ -62,6 +70,12 @@ uint64_t read_cr4() {
 	return cr4;
 }
 
+
+void my_function() {
+
+	printf("Hello world!\n");
+}
+
 int main() {
 	printf("This is a simple test!\n");
 
@@ -75,30 +89,72 @@ int main() {
 
 	println("I'm in dune mode !");
 
-	/*crawl_stats_t result = crawl(pgroot);
-	printf("The result is %u pml4 entries, %u pdpte entries, and %u pde entries.\n", result.pml4_entries, result.pdpte_entries, result.pde_entries);
-	printf("And the bigs %u and %u\n", result.pdpte_big, result.pde_big);*/
-
 	dune_register_pgflt_handler(pgflt_handler);
-	
-	// ptent_t* newPg = remove_access_RW(pgroot);
 
 	ptent_t *cppgroot;
 
-	cppgroot = deep_copy_pgroot(pgroot, cppgroot);
-	//TODO like in sthread with st_tf, and jump to user.
-	// struct dune_tf tf;
-
-	printf("Just before the load_cr3.\n");
+	/* 	1. We copy the pageroot
+	 	2. We create a local variable
+	 	3. Verify it has a mapping in both pgroot.
+	 	4. Identify its page table
+	 	5. Revoke it inside the copy of the page table.
+	 	6. load copy of pgroot.*/
 	
+	cppgroot = deep_copy_pgroot(pgroot, cppgroot);
+
+	if (!has_a_mapping(pgroot, &GLOBAL_TESTING) 
+		|| !has_a_mapping(cppgroot, &GLOBAL_TESTING)) {
+		printf("The given address(a) %p lacks one or both mappings.\n", 
+			&GLOBAL_TESTING);
+		exit(1);
+	}
+
+	printf("Revoking access for its page.\n");
+
+	location_t locA = get_location(cppgroot, &GLOBAL_TESTING);
+	
+	printf("Address is %p.\n", &GLOBAL_TESTING);
+	printf("i: %d, j:%d, k: %d, l: %d.\n", locA.i, locA.j, locA.k, locA.l);
+
+	
+	make_read_only(cppgroot, locA);
+	//dune_procmap_dump();
+
+	printf("Loading the copied cr3.\n");
 	load_cr3((unsigned long) cppgroot);
+	printf("After the load.\n");
 
-	//dune_jump_to_user(&tf);
+	printf("Printing %d\n", GLOBAL_TESTING);
+	GLOBAL_TESTING = 4;
+	//dune_procmap_dump();
+	printf("Survived!!! %d\n", GLOBAL_TESTING);
 
-	//load_cr3(pgroot);
+	//dune_page_stats();
 
-	printf("Reached the end!\n");
-	// int a = 3;
-	// printf("Can still print %d\n", a);	
+	struct sthread th;
+
+	th.st_stack = mmap(NULL, 10 * PGSIZE, PROT_READ | PROT_WRITE, 
+		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0); 
+
+	printf((has_a_mapping(pgroot, th.st_stack))? "Stack is mapped\n": "Stack not mapped\n");
+
+	printf((has_a_mapping(cppgroot, th.st_stack))? "Weird has a mapping there too.\n" : "No mapping.\n");
+
+	th.st_pgroot = pgroot;
+
+	struct dune_tf tf;
+
+	memset(&tf, 0, sizeof(tf));
+
+	tf.rip = (unsigned long) my_function;
+	tf.rsp = (unsigned long) th.st_stack + (10 * PGSIZE);
+	printf("Stack base is %p\n", tf.rsp);
+
+	tf.rflags = 0x02;
+
+	printf("Before the jump.\n");
+	dune_jump_to_user(&tf);
+	printf("Back from the jump.\n");
+	
 	return 0;
 }
